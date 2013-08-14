@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.ServiceModel;
 using System.Runtime.Serialization;
+using System.Net;
 
 namespace WcfDemoHybrid
 {
@@ -37,7 +38,7 @@ namespace WcfDemoHybrid
             do
             {
                 Console.Write("Enter server's endpoint (defailt is \"{0}\"):", defUrl);
-                string serverEndpoint = Settings.DefaultServerEndpoint;
+                string serverEndpoint = Console.ReadLine();
 
                 if (string.IsNullOrEmpty(serverEndpoint)) serverEndpoint = defUrl;
                 defUrl = serverEndpoint;
@@ -50,7 +51,9 @@ namespace WcfDemoHybrid
 
                         Console.WriteLine("Server started at " + serverEndpoint);
 
-                        serverCreated = true;
+                        Console.ReadLine();
+
+                        return;
                     }
                 }
                 catch (Exception ex)
@@ -67,8 +70,6 @@ namespace WcfDemoHybrid
                     Console.WriteLine("Error: \"{0}\". Please try again.", msg);
                 }
             } while (!serverCreated);
-
-            Console.ReadLine();
         }
 
         private static void RunClient()
@@ -82,23 +83,35 @@ namespace WcfDemoHybrid
                 if (string.IsNullOrEmpty(clientName)) Console.WriteLine("Empty name is not allowed. Please try again");
             } while (String.IsNullOrEmpty(clientName));
 
-            var server = ChannelFactory<ISimpleService>.CreateChannel(
-                            new BasicHttpBinding(),
-                            new EndpointAddress(Settings.DefaultServerEndpoint));
-
             var clientService = new SimpleClient();
-            var url = Settings.DefaultClientEndpoint + "_" + clientService.ServiceUniqueName.ToString();
+            var defaultClientEndpoint = Settings.DefaultClientEndpoint + "_" + clientService.ServiceUniqueName.ToString();
 
-            server.RegisterClient(new ClientDescription
-            {
-                ClientId = clientService.ServiceUniqueName,
-                ClientName = clientName,
-                ServiceClietnCallbackUrl = url
-            });
+            Console.Write("Enter client's endpoint (default is {0}):", defaultClientEndpoint);
+            string clientEndpoint = Console.ReadLine();
+            if (string.IsNullOrEmpty(clientEndpoint)) clientEndpoint = defaultClientEndpoint;
 
-            using (var clientHost = new ServiceHost(clientService, new Uri(url)))
+            using (var clientHost = new ServiceHost(clientService, new Uri(clientEndpoint)))
             {
                 clientHost.Open();
+
+                string defaultServerEndpoint = Settings.DefaultServerEndpoint;
+                Console.Write("Enter service's endpoint (default is {0}):", defaultServerEndpoint);
+
+                string serverEndpoint = Console.ReadLine();
+                if (string.IsNullOrEmpty(serverEndpoint)) serverEndpoint = defaultServerEndpoint;
+
+                var server = ChannelFactory<ISimpleService>.CreateChannel(
+                                new BasicHttpBinding(),
+                                new EndpointAddress(serverEndpoint));
+
+                server.RegisterClient(new ClientDescription
+                {
+                    ClientId = clientService.ServiceUniqueName,
+                    ClientName = clientName,
+                    ServiceClietnCallbackUrl = clientEndpoint
+                });
+
+
 
                 while (true)
                 {
@@ -116,7 +129,7 @@ namespace WcfDemoHybrid
 
         static Settings()
         {
-            string hostName = "localhost:8081";
+            string hostName = Dns.GetHostName() + ":8081";
             DefaultServerEndpoint = "http://" + hostName + "/simpleServer";
             DefaultClientEndpoint = "http://" + hostName + "/simpleClient";
         }
@@ -172,11 +185,14 @@ namespace WcfDemoHybrid
 
         public void RegisterClient(ClientDescription clientDescr)
         {
-            Console.WriteLine("User \"{0}\" joined", clientDescr.ClientName);
+            string message = string.Format("User \"{0}\" joined", clientDescr.ClientName);
+
             _clientsDescr[clientDescr.ClientId] = clientDescr;
             _clients[clientDescr.ClientId] = ChannelFactory<ISimpleClient>.CreateChannel(
                                 new BasicHttpBinding(),
                                 new EndpointAddress(clientDescr.ServiceClietnCallbackUrl));
+
+            SendMessage(clientDescr.ClientId, message);
         }
     }
 
