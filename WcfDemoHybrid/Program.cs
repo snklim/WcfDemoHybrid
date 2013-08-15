@@ -94,29 +94,55 @@ namespace WcfDemoHybrid
             {
                 clientHost.Open();
 
-                string defaultServerEndpoint = Settings.DefaultServerEndpoint;
-                Console.Write("Enter service's endpoint (default is {0}):", defaultServerEndpoint);
+                bool connectedToServer = false;
+                ISimpleService server = null;
+                int numOfAttempts = 10;
 
-                string serverEndpoint = Console.ReadLine();
-                if (string.IsNullOrEmpty(serverEndpoint)) serverEndpoint = defaultServerEndpoint;
-
-                var server = ChannelFactory<ISimpleService>.CreateChannel(
-                                new BasicHttpBinding(),
-                                new EndpointAddress(serverEndpoint));
-
-                server.RegisterClient(new ClientDescription
+                do
                 {
-                    ClientId = clientService.ServiceUniqueName,
-                    ClientName = clientName,
-                    ServiceClietnCallbackUrl = clientEndpoint
-                });
+                    string defaultServerEndpoint = Settings.DefaultServerEndpoint;
+                    Console.Write("Enter service's endpoint (default is {0}):", defaultServerEndpoint);
+
+                    string serverEndpoint = Console.ReadLine();
+                    if (string.IsNullOrEmpty(serverEndpoint)) serverEndpoint = defaultServerEndpoint;
+
+                    server = ChannelFactory<ISimpleService>.CreateChannel(
+                                            new BasicHttpBinding(),
+                                            new EndpointAddress(serverEndpoint));
+
+                    try
+                    {
+                        server.RegisterClient(new ClientDescription
+                        {
+                            ClientId = clientService.ServiceUniqueName,
+                            ClientName = clientName,
+                            ServiceClietnCallbackUrl = clientEndpoint
+                        });
+                        connectedToServer = true;
+                    }
+                    catch (Exception)
+                    {
+                        numOfAttempts--;
+                        if (numOfAttempts > 0) Console.WriteLine("Cannot connect to server. Try again.");
+                    }
+                } while (!connectedToServer && numOfAttempts > 0);
 
 
-
-                while (true)
+                if (connectedToServer)
                 {
-                    string msg = Console.ReadLine();
-                    server.SendMessage(clientService.ServiceUniqueName, msg);
+                    while (true)
+                    {
+                        string msg = Console.ReadLine();
+                        try
+                        {
+                            server.SendMessage(clientService.ServiceUniqueName, msg);
+                        }
+                        catch (Exception) { Console.WriteLine("Server shut down"); break; }
+                    }
+                }
+                else
+                {
+                    Console.WriteLine("Cannot connect to server.");
                 }
             }
         }
